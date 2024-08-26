@@ -26,12 +26,26 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
 # Creates SQLALCHEMY Object
 db = SQLAlchemy(app)
 
-@app.before_first_request
-def create_tables():
-     db.create_all()
+# Database ORMs
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    public_id = db.Column(db.String(50), unique = True)
+    name = db.Column(db.String(100))
+    email = db.Column(db.String(70), unique = True)
+    password = db.Column(db.String(80))
 
-if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+# @app.before_first_request
+def create_tables():
+    db.create_all()
+
+# if __name__ == "__main__":
+#     create_tables()
+#     print("Started...")
+#     app.run(debug=True, port=5000)
+
+with app.app_context():
+    print("Started...")
+    db.create_all()
 
 def token_required(f):
     @wraps(f)
@@ -53,22 +67,15 @@ def token_required(f):
                 'message' : 'Token is Invalid!'
             }), 401
         # Returns The Current Logged In Users Contex To The Routes
-        return  f(current_user, *args, **kwargs)
-  
+        return f(current_user, *args, **kwargs)
+    
     return decorated
-
-# Database ORMs
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key = True)
-    public_id = db.Column(db.String(50), unique = True)
-    name = db.Column(db.String(100))
-    email = db.Column(db.String(70), unique = True)
-    password = db.Column(db.String(80))
 
 ############################################################################
 ################################## ROUTES ##################################
 ############################################################################
 
+# curl -H 'Content-Type: application/json' -d '{"name": "gabriel", "password": "1234", "email": "gp@gmail"}' -X POST localhost:5000/signup
 @app.route('/signup', methods =['POST'])
 def signup():
     # Creates A Dictionary Of The Form Data
@@ -96,8 +103,10 @@ def signup():
         return make_response('Successfully registered.', 201)
     else:
         # Returns 202 If User Already Exists
-        return make_response('User already exists. Please Log in.', 202)
+        return make_response('User already exists. Please Log in.\n', 202)
 
+# curl -H 'Content-Type: application/json' -d '{"password": "1234", "email": "gp@gmail"}' -X POST localhost:5000/login
+# Must return token
 @app.route('/login', methods =['POST'])
 def login():
     # Creates Dictionary Of Form Data
@@ -136,6 +145,8 @@ def login():
         {'WWW-Authenticate' : 'Basic realm ="Wrong Password !!"'}
     )
 
+# curl -H 'Content-Type: application/json' -H 'x-access-token:<token>'  -X GET localhost:5000/users
+
 @app.route('/users', methods =['GET'])
 @token_required
 def get_all_users(current_user):
@@ -160,35 +171,38 @@ def get_all_users(current_user):
 ############################## DOWNLOAD ROUTES ##############################
 #############################################################################
 
+#curl -H 'Content-Type: application/json' -H 'x-access-token: <token>' -X POST -d '{"link": "<video-link>", "name": "<video-name>"}' localhost:5000/youtube/video
 @app.route('/youtube/video', methods=['POST'])
 @token_required
-def getVideo():
+def getVideo(user):
     data = request.get_json()
     link = data['link']
-    name = downloadVideo(link)
+    name = data['name']
+    downloadVideo(link, name)
     return send_from_directory("./video", f"{name}.mp4", as_attachment=True)
 
 @app.route('/youtube/music', methods=['POST'])
 @token_required
-def getMusic():
+def getMusic(user): # user == current user
     data = request.get_json()
     link = data['link']
     name = data['name']
     downloadMusic(link, name)
     return send_from_directory("./music", f"{name}.mp3", as_attachment=True)
 
+#curl -H 'Content-Type: application/json' -H 'x-access-token: <token>' -X GET localhost:5000/youtube/music/<youtube-video-id>/<music-name>
 @app.route('/youtube/music/<id>/<name>', methods=['GET'])
 @token_required
-def getMusic2(id, name):
+def getMusic2(user, id, name):
     link = 'https://www.youtube.com/watch?v=' + id
     downloadMusic(link, name)
     return send_from_directory("./music", f"{name}.mp3", as_attachment=True)
 
-@app.route('/youtube/video/<id>', methods=['GET'])
+@app.route('/youtube/video/<id>/<name>', methods=['GET'])
 @token_required
-def getVideo2(id):
+def getVideo2(user, id, name):
     link = 'https://www.youtube.com/watch?v=' + id
-    name = downloadVideo(link)
+    downloadVideo(link, name)
     return send_from_directory("./video", f"{name}.mp4", as_attachment=True)
 
     
